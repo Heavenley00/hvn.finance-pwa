@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#8063A8">
+<meta name="description" content="Heavenly Finance - Personal Finance Tracker">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>Heavenly Finance – Personal Finance Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['"Nunito"','system-ui','sans-serif']}}}}</script>
+<style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{font-family:'Nunito',system-ui,sans-serif}input:focus,select:focus,button:focus-visible{outline:2px solid #91A88F;outline-offset:1px}@keyframes pg{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}.pg{animation:pg .4s ease-out}button,select,input{transition:all .2s}@media(prefers-reduced-motion:reduce){.pg{animation:none}*{transition:none!important}}</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+</head>
+<body class="bg-[#FAF9FC] dark:bg-[#18151f] text-[#393544] dark:text-[#ece8f3]"><div id="root"></div>
+<script>
+const {useState,useEffect,useMemo}=React;const html=htm.bind(React.createElement);
+/* ===== Konstanta & helper ===== */
+const IN=['Salary','Freelance','Business','Bonus','Investment Income','Other Income'];
+const EX=['Food & Beverage','Transportation','Shopping','Bills & Utilities','Housing','Health','Education','Entertainment','Travel','Personal Care','Family','Other'];
+const TYPES=['Cash','Bank Account','E-Wallet','Savings Account'];
+const METHODS=['Tunai','Debit','Kartu Kredit','Transfer','QRIS / E-Wallet'];
+const COL=['#A78BCA','#91A88F','#D68F9A','#D6B477','#8063A8','#657F65','#C7B3E0','#B7C9B5','#E5B5BC','#E8D2A3','#9c94a8','#7a6a8f'];
+const KEY='myfinance_v1';
+const idr=n=>(n<0?'-':'')+'Rp'+Math.abs(Math.round(n)).toLocaleString('id-ID');
+const fd=d=>new Date(d+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
+const iso=d=>new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+const today=()=>iso(new Date());const mk=d=>d.slice(0,7);
+const mlabel=k=>new Date(k+'-01T00:00:00').toLocaleDateString('id-ID',{month:'short',year:'2-digit'});
+const lastM=n=>{const d=new Date();return Array.from({length:n},(_,i)=>{const x=new Date(d.getFullYear(),d.getMonth()-(n-1-i),1);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')})};
+const uid=()=>Math.random().toString(36).slice(2,10);
+const sum=a=>a.reduce((s,x)=>s+x,0);const cx=(...a)=>a.filter(Boolean).join(' ');
+const tot=(tx,type,f)=>sum(tx.filter(t=>t.type===type&&f(t.date)).map(t=>t.amount));
+const byCat=l=>{const m={};l.forEach(t=>m[t.cat]=(m[t.cat]||0)+t.amount);return Object.entries(m).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value)};
+const blank=()=>({accounts:[{id:'a1',name:'Kas',type:'Cash',opening:0}],tx:[],budget:{total:0,cats:{}},goals:[]});
+const load=()=>{try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.accounts)return s}catch(e){}return blank()};
+const balances=S=>{const b={};S.accounts.forEach(a=>b[a.id]=+a.opening||0);S.tx.forEach(t=>{if(t.type==='income'){if(t.acc in b)b[t.acc]+=t.amount}else if(t.type==='expense'){if(t.acc in b)b[t.acc]-=t.amount}else{if(t.acc in b)b[t.acc]-=t.amount;if(t.to in b)b[t.to]+=t.amount}});return b};
+const derive=S=>{const bal=balances(S),cm=mk(today()),inM=d=>mk(d)===cm;const inc=tot(S.tx,'income',inM),exp=tot(S.tx,'expense',inM);const bud=S.budget.total||sum(Object.values(S.budget.cats));
+return{bal,total:sum(Object.values(bal)),cm,inc,exp,net:inc-exp,rate:inc>0?(inc-exp)/inc*100:null,bud,usage:bud>0?exp/bud*100:null,cat:byCat(S.tx.filter(t=>t.type==='expense'&&inM(t.date)))}};
+const sample=()=>{const n=new Date();const A=[{id:'s1',name:'Bank BCA',type:'Bank Account',opening:5000000},{id:'s2',name:'GoPay',type:'E-Wallet',opening:300000},{id:'s3',name:'Tabungan',type:'Savings Account',opening:2000000}].map(a=>({...a,sample:true}));const tx=[];
+for(let m=2;m>=0;m--){const b=new Date(n.getFullYear(),n.getMonth()-m,1);const add=(type,day,name,cat,amount,acc,x)=>{if(m===0&&day>n.getDate())return;tx.push({id:uid(),type,date:iso(new Date(b.getFullYear(),b.getMonth(),day)),name,cat,amount,acc,method:'Transfer',note:'',sample:true,...x})};
+add('income',1,'Gaji bulanan','Salary',9000000,'s1');add('income',12,'Proyek desain','Freelance',1500000+m*250000,'s1');add('expense',2,'Sewa kos','Housing',2000000,'s1');add('expense',3,'Listrik & internet','Bills & Utilities',650000,'s1');
+add('expense',5,'Makan siang','Food & Beverage',45000+m*5000,'s2');add('expense',8,'Belanja bulanan','Food & Beverage',700000,'s1');add('expense',9,'Ojek online','Transportation',120000+m*30000,'s2');add('expense',14,'Beli baju','Shopping',350000+m*100000,'s1');add('expense',17,'Nonton bioskop','Entertainment',120000,'s2');add('expense',20,'Periksa dokter','Health',250000,'s1');add('transfer',3,'Tabungan bulanan','Transfer',1500000,'s1',{to:'s3'})}
+const y=new Date(n.getFullYear()+1,n.getMonth(),1);
+return{A,tx,goals:[{id:uid(),name:'Dana Darurat',target:30000000,saved:8000000,date:iso(y),sample:true},{id:uid(),name:'Laptop Baru',target:15000000,saved:4500000,date:iso(new Date(n.getFullYear(),n.getMonth()+6,1)),sample:true}]}};
+/* ===== Komponen dasar ===== */
+const Ctx=React.createContext();const useC=()=>React.useContext(Ctx);
+const inp='w-full rounded-2xl border border-[#E3D8F0] dark:border-[#3d3650] focus:border-[#91A88F] bg-white dark:bg-[#241f2e] px-3 py-2 text-sm';
+const Card=({c='',children})=>html`<div class=${cx('rounded-[20px] border border-[#EAE6EF] dark:border-[#352f42] bg-white dark:bg-[#241f2e] p-4 sm:p-5 shadow-[0_2px_16px_rgba(128,99,168,0.08)] transition-shadow duration-300 hover:shadow-[0_4px_22px_rgba(128,99,168,0.14)]',c)}>${children}</div>`;
+const Title=({children,r})=>html`<div class="flex items-center justify-between mb-3"><h3 class="font-semibold text-sm">${children}</h3>${r}</div>`;
+const Btn=({k='pri',class:c,children,...p})=>html`<button ...${p} class=${cx('px-3.5 py-2 rounded-2xl text-sm font-semibold transition duration-200 active:scale-[.97] disabled:opacity-50 whitespace-nowrap',k==='pri'?'bg-[#8063A8] hover:bg-[#6f5496] text-white':k==='danger'?'bg-[#B5606E] hover:bg-[#9f505d] text-white':'border bg-[#DCE8D9] text-[#4f654f] hover:bg-[#cfe0cb] dark:bg-[#2c3a2c] dark:text-[#bcd2ba] dark:hover:bg-[#364636]',c)}>${children}</button>`;
+const F=({l,children,c})=>html`<label class=${cx('block text-xs font-medium text-[#888391] dark:text-[#a9a3b5]',c)}><span class="block mb-1">${l}</span>${children}</label>`;
+const Sel=({v,set,o,all})=>html`<select class=${inp} value=${v} onChange=${e=>set(e.target.value)}>${all?html`<option value="">${all}</option>`:null}${o.map(x=>html`<option key=${x.v??x} value=${x.v??x}>${x.l??x}</option>`)}</select>`;
+const Modal=({t,close,children})=>html`<div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick=${close}><div class="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-[20px] bg-white dark:bg-[#241f2e] p-5 shadow-2xl" onClick=${e=>e.stopPropagation()}><div class="flex justify-between items-center mb-4"><h3 class="font-semibold">${t}</h3><button onClick=${close} aria-label="Tutup" class="text-[#888391] text-2xl leading-none">×</button></div>${children}</div></div>`;
+const lvl=p=>p>=100?'bg-[#D68F9A]':p>=90?'bg-[#CF9C6A]':p>=80?'bg-[#D6B477]':'bg-[#91A88F]';
+const Prog=({p,c})=>html`<div class="h-2 rounded-full bg-[#EFEAF4] dark:bg-[#352f42] overflow-hidden"><div class=${cx('h-full rounded-full transition-all duration-700 ease-out',c||lvl(p))} style=${{width:Math.min(100,Math.max(0,p))+'%'}}></div></div>`;
+const Empty=({t})=>html`<p class="text-sm text-[#888391] py-8 text-center">${t}</p>`;
+const Head=({t,s,children})=>html`<div class="flex flex-wrap items-end justify-between gap-3 mb-5"><div><h1 class="text-xl sm:text-2xl font-bold tracking-tight">${t}</h1><p class="text-sm text-[#888391] dark:text-[#a9a3b5]">${s}</p></div><div class="flex gap-2 flex-wrap">${children}</div></div>`;
+const Stat=({l,v,s,tone})=>html`<${Card}><p class="text-xs text-[#888391] dark:text-[#a9a3b5]">${l}</p><p class=${cx('text-xl sm:text-2xl font-bold mt-1 tracking-tight',tone)}>${v}</p>${s?html`<p class="text-xs text-[#888391] mt-1">${s}</p>`:null}<//>`;
+/* ===== Chart SVG ===== */
+const Bars=({data,one})=>{const mx=Math.max(1,...data.flatMap(d=>one?[d.b]:[d.a,d.b]));const w=400/Math.max(data.length,1);
+return html`<svg viewBox="0 0 400 190" class="w-full">${data.map((d,i)=>{const x=i*w+w/2,ha=d.a/mx*150,hb=d.b/mx*150;return html`<g key=${i}><title>${d.label}: ${one?idr(d.b):idr(d.a)+' / '+idr(d.b)}</title>${one?null:html`<rect x=${x-16} y=${160-ha} width="14" height=${ha} rx="3" fill="#91A88F"/>`}<rect x=${one?x-10:x+2} y=${160-hb} width=${one?20:14} height=${hb} rx="3" fill="#D68F9A"/><text x=${x} y="180" text-anchor="middle" font-size="10" fill="currentColor" opacity=".6">${d.label}</text></g>`})}</svg>`};
+const Donut=({data})=>{const t=sum(data.map(d=>d.value));if(!t)return html`<${Empty} t="Belum ada pengeluaran pada periode ini."/>`;let c=0;const C=2*Math.PI*40;
+return html`<div class="flex flex-col sm:flex-row items-center gap-4"><svg viewBox="0 0 100 100" class="w-36 h-36 -rotate-90 shrink-0">${data.map((d,i)=>{const l=d.value/t*C;const el=html`<circle key=${i} cx="50" cy="50" r="40" fill="none" stroke=${COL[i%12]} stroke-width="14" stroke-dasharray=${l+' '+(C-l)} stroke-dashoffset=${-c}><title>${d.label}: ${idr(d.value)}</title></circle>`;c+=l;return el})}</svg><ul class="text-xs space-y-1.5 w-full">${data.slice(0,6).map((d,i)=>html`<li key=${i} class="flex justify-between gap-2"><span class="flex items-center gap-2 min-w-0"><i class="w-2.5 h-2.5 rounded-full shrink-0" style=${{background:COL[i%12]}}></i><span class="truncate">${d.label}</span></span><b>${Math.round(d.value/t*100)}%</b></li>`)}</ul></div>`};
+const Line=({data,color='#A78BCA'})=>{if(data.length<2)return html`<${Empty} t="Data belum memadai."/>`;const vs=data.map(d=>d.v),mn=Math.min(...vs),mx=Math.max(...vs),rg=(mx-mn)||1;const p=data.map((d,i)=>[10+i/(data.length-1)*380,150-(d.v-mn)/rg*130]);const ps=p.map(q=>q.join(',')).join(' ');
+return html`<svg viewBox="0 0 400 190" class="w-full"><polygon points=${'10,160 '+ps+' 390,160'} fill=${color} opacity=".12"/><polyline points=${ps} fill="none" stroke=${color} stroke-width="2.5" stroke-linejoin="round"/>${p.map((q,i)=>html`<g key=${i}><title>${data[i].label}: ${idr(data[i].v)}</title><circle cx=${q[0]} cy=${q[1]} r="3.5" fill=${color}/><text x=${q[0]} y="180" text-anchor="middle" font-size="10" fill="currentColor" opacity=".6">${data[i].label}</text></g>`)}</svg>`};
+/* ===== Baris transaksi ===== */
+const Row=({t,act})=>{const {S,edit,del}=useC();const an=id=>(S.accounts.find(a=>a.id===id)||{name:'(dihapus)'}).name;const ty=t.type;
+const tone=ty==='income'?'bg-[#DCE8D9] text-[#4f654f] dark:bg-[#2c3a2c] dark:text-[#bcd2ba]':ty==='expense'?'bg-[#F6E1E4] text-[#B5606E] dark:bg-[#43282e] dark:text-[#e8b0b8]':'bg-[#E9DFF5] text-[#6b4f93] dark:bg-[#3a3150] dark:text-[#d9c8ee]';
+return html`<div class="flex items-center gap-3 py-3 border-b last:border-0 border-[#F1EDF6] dark:border-[#2e283b]"><div class=${cx('w-9 h-9 rounded-2xl grid place-items-center text-sm shrink-0',tone)}>${ty==='income'?'↓':ty==='expense'?'↑':'⇄'}</div><div class="min-w-0 flex-1"><p class="text-sm font-medium truncate">${t.name}</p><p class="text-xs text-[#888391] truncate">${fd(t.date)} · ${ty==='transfer'?an(t.acc)+' → '+an(t.to):t.cat+' · '+an(t.acc)}</p></div><p class=${cx('text-sm font-semibold whitespace-nowrap',ty==='income'?'text-[#657F65] dark:text-[#a9c0a7]':ty==='expense'?'text-[#C0707E] dark:text-[#e3a3ad]':'text-[#8063A8] dark:text-[#c9b3e6]')}>${ty==='income'?'+':ty==='expense'?'-':''}${idr(t.amount)}</p>${act?html`<div class="flex"><button title="Edit" onClick=${()=>edit(t)} class="p-1.5 text-[#888391] hover:text-[#8063A8]">✎</button><button title="Hapus" onClick=${()=>del(t)} class="p-1.5 text-[#888391] hover:text-[#C0707E]">✕</button></div>`:null}</div>`};
+/* ===== Insight ===== */
+const Insights=()=>{const {S,D}=useC();const t=today(),dn=+t.slice(8),pm=lastM(2)[0];
+const cur=S.tx.filter(x=>x.type==='expense'&&mk(x.date)===D.cm);
+if(cur.length<3)return html`<${Empty} t="Data belum memadai. Catat minimal 3 pengeluaran bulan ini untuk melihat insight."/>`;
+const prev=S.tx.filter(x=>x.type==='expense'&&mk(x.date)===pm&&+x.date.slice(8)<=dn);const pc=byCat(prev);const I=[];const top=D.cat[0];
+I.push(['Kategori terbesar',`${top.label}: ${idr(top.value)} (${Math.round(top.value/D.exp*100)}% dari pengeluaran bulan ini).`]);
+if(prev.length){const ch=D.cat.map(c=>({...c,p:(pc.find(x=>x.label===c.label)||{value:0}).value})).filter(c=>c.p>0&&c.value>c.p*1.2).sort((a,b)=>(b.value-b.p)-(a.value-a.p));
+I.push(['Dibanding bulan lalu',ch.length?`${ch[0].label} naik ${Math.round((ch[0].value/ch[0].p-1)*100)}% pada periode yang sama (${idr(ch[0].p)} menjadi ${idr(ch[0].value)}).`:'Tidak ada kategori yang naik lebih dari 20% pada periode yang sama bulan lalu.'])}else I.push(['Dibanding bulan lalu','Data bulan lalu belum memadai untuk perbandingan.']);
+I.push(['Persentase ditabung',D.rate===null?'Belum ada pemasukan bulan ini, jadi savings rate belum bisa dihitung.':`Kamu menyisihkan ${D.rate.toFixed(0)}% dari pemasukan bulan ini.`]);
+const avg=D.exp/dn;I.push(['Rata-rata pengeluaran harian',`${idr(avg)} per hari (hingga tanggal ${dn}).`]);
+if(dn>=3){const dim=new Date(+t.slice(0,4),+t.slice(5,7),0).getDate();I.push(['Prediksi saldo akhir bulan',`Jika pola ini berlanjut dan tanpa pemasukan baru, total saldo sekitar ${idr(D.total-avg*(dim-dn))}.`])}else I.push(['Prediksi saldo akhir bulan','Data belum memadai (butuh minimal 3 hari berjalan).']);
+const dis=sum(D.cat.filter(c=>['Shopping','Entertainment','Food & Beverage','Travel','Personal Care'].includes(c.label)).map(c=>c.value));const sh=dis/D.exp;
+I.push(['Rekomendasi penghematan',sh>=.3?`Belanja, hiburan, makan, travel, dan perawatan diri mencapai ${Math.round(sh*100)}% pengeluaran. Memangkas 10% di kelompok ini menghemat sekitar ${idr(dis*.1)} per bulan.`:'Belum ada pola pengeluaran gaya hidup yang menonjol.']);
+return html`<div class="grid sm:grid-cols-2 gap-3">${I.map((x,i)=>html`<div key=${i} class="rounded-2xl bg-[#F7F3FB] dark:bg-[#2e283b] p-3.5"><p class="text-xs font-semibold text-[#8063A8] dark:text-[#c9b3e6]">${x[0]}</p><p class="text-sm mt-1 leading-relaxed">${x[1]}</p></div>`)}</div>`};
+/* ===== Dashboard ===== */
+const Dash=()=>{const {S,D,nav}=useC();const ms=lastM(6);const open=sum(S.accounts.map(a=>+a.opening||0));
+const bars=ms.map(m=>({label:mlabel(m),a:tot(S.tx,'income',d=>mk(d)===m),b:tot(S.tx,'expense',d=>mk(d)===m)}));
+const line=ms.map(m=>({label:mlabel(m),v:open+sum(S.tx.filter(t=>t.date<=m+'-31'&&t.type!=='transfer').map(t=>t.type==='income'?t.amount:-t.amount))}));
+const recent=[...S.tx].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);const bc=Object.entries(S.budget.cats);
+return html`<div><${Head} t="Dashboard" s=${'Ringkasan keuangan '+new Date().toLocaleDateString('id-ID',{month:'long',year:'numeric'})}/>
+<div class="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4">
+<${Stat} l="Total Balance" tone="text-[#8063A8] dark:text-[#c9b3e6]" v=${idr(D.total)} s="Semua rekening"/><${Stat} l="Total Income" v=${idr(D.inc)} tone="text-[#657F65] dark:text-[#a9c0a7]" s="Bulan ini"/><${Stat} l="Total Expense" v=${idr(D.exp)} tone="text-[#C0707E] dark:text-[#e3a3ad]" s="Bulan ini"/>
+<${Stat} l="Net Cash Flow" v=${idr(D.net)} tone=${D.net<0?'text-[#C0707E] dark:text-[#e3a3ad]':'text-[#657F65] dark:text-[#a9c0a7]'} s="Income - Expense"/><${Stat} l="Savings Rate" tone="text-[#657F65] dark:text-[#a9c0a7]" v=${D.rate===null?'-':D.rate.toFixed(1)+'%'} s=${D.rate===null?'Belum ada pemasukan':'Dari pemasukan'}/><${Stat} l="Budget Usage" v=${D.usage===null?'-':D.usage.toFixed(0)+'%'} s=${D.usage===null?'Budget belum diatur':idr(D.exp)+' dari '+idr(D.bud)}/></div>
+<div class="grid lg:grid-cols-2 gap-4 mb-4"><${Card}><${Title} r=${html`<span class="text-xs text-[#888391]"><b class="text-[#91A88F]">■</b> Income <b class="text-[#D68F9A]">■</b> Expense</span>`}>Income vs Expense (6 bulan)<//><${Bars} data=${bars}/><//>
+<${Card}><${Title}>Pengeluaran per kategori (bulan ini)<//><${Donut} data=${D.cat}/><//>
+<${Card}><${Title}>Perkembangan saldo<//><${Line} data=${line}/><//>
+<${Card}><${Title} r=${html`<button class="text-xs text-[#8063A8] dark:text-[#c9b3e6] font-semibold" onClick=${()=>nav('tx')}>Lihat semua</button>`}>Transaksi terakhir<//>${recent.length?recent.map(t=>html`<${Row} key=${t.id} t=${t}/>`):html`<${Empty} t="Belum ada transaksi. Tambahkan lewat menu Transactions."/>`}<//></div>
+<div class="grid lg:grid-cols-2 gap-4"><${Card}><${Title}>Budget progress<//>${bc.length?html`<div class="space-y-3">${bc.map(([k,v])=>{const u=(D.cat.find(c=>c.label===k)||{value:0}).value,p=u/v*100;return html`<div key=${k}><div class="flex justify-between text-xs mb-1"><span>${k}</span><span class="text-[#888391]">${idr(u)} / ${idr(v)}</span></div><${Prog} p=${p}/></div>`})}</div>`:html`<${Empty} t="Atur budget per kategori di menu Budget."/>`}<//>
+<${Card}><${Title}>Insight otomatis<//><${Insights}/><//></div></div>`};
+/* ===== Transaksi ===== */
+const TxPage=({kind})=>{const {S,setModal}=useC();const [q,sq]=useState(''),[from,sf]=useState(''),[to,st]=useState(''),[cat,sc]=useState(''),[acc,sa]=useState(''),[so,ss]=useState('d-');
+const cats=kind==='income'?IN:kind==='expense'?EX:[...IN,...EX];
+let L=S.tx.filter(t=>(kind==='all'||t.type===kind)&&(!q||(t.name+' '+t.note+' '+t.cat).toLowerCase().includes(q.toLowerCase()))&&(!from||t.date>=from)&&(!to||t.date<=to)&&(!cat||t.cat===cat)&&(!acc||t.acc===acc||t.to===acc));
+L=[...L].sort((a,b)=>so==='d-'?b.date.localeCompare(a.date):so==='d+'?a.date.localeCompare(b.date):so==='n-'?b.amount-a.amount:a.amount-b.amount);
+const ti=tot(L,'income',()=>true),te=tot(L,'expense',()=>true);const T={all:['Transactions','Semua pemasukan, pengeluaran, dan transfer'],income:['Income','Catatan pemasukan'],expense:['Expenses','Catatan pengeluaran']}[kind];
+return html`<div><${Head} t=${T[0]} s=${T[1]}>${kind==='all'?html`<${Btn} k="ghost" onClick=${()=>setModal({k:'tx',type:'transfer'})}>Transfer<//>`:null}<${Btn} onClick=${()=>setModal({k:'tx',type:kind==='all'?'expense':kind})}>+ ${kind==='income'?'Pemasukan':kind==='expense'?'Pengeluaran':'Transaksi'}<//><//>
+<${Card} c="mb-4"><div class="grid grid-cols-2 lg:grid-cols-6 gap-3"><${F} l="Cari" c="col-span-2"><input class=${inp} placeholder="Nama, catatan, kategori" value=${q} onInput=${e=>sq(e.target.value)}/><//>
+<${F} l="Dari tanggal"><input type="date" class=${inp} value=${from} onChange=${e=>sf(e.target.value)}/><//><${F} l="Sampai"><input type="date" class=${inp} value=${to} onChange=${e=>st(e.target.value)}/><//>
+<${F} l="Kategori"><${Sel} v=${cat} set=${sc} o=${cats} all="Semua"/><//><${F} l="Rekening"><${Sel} v=${acc} set=${sa} o=${S.accounts.map(a=>({v:a.id,l:a.name}))} all="Semua"/><//>
+<${F} l="Urutkan" c="col-span-2 lg:col-span-1"><${Sel} v=${so} set=${ss} o=${[{v:'d-',l:'Tanggal terbaru'},{v:'d+',l:'Tanggal terlama'},{v:'n-',l:'Nominal terbesar'},{v:'n+',l:'Nominal terkecil'}]}/><//></div></${Card}>
+<${Card}><p class="text-xs text-[#888391] mb-1">${L.length} transaksi${kind!=='expense'?' · Income '+idr(ti):''}${kind!=='income'?' · Expense '+idr(te):''}</p>${L.length?L.map(t=>html`<${Row} key=${t.id} t=${t} act=${1}/>`):html`<${Empty} t="Tidak ada transaksi yang cocok. Tambahkan transaksi baru atau ubah filter."/>`}<//></div>`};
+const TxForm=({t,type,close})=>{const {S,set}=useC();const [f,sf]=useState(t||{type:type||'expense',date:today(),name:'',cat:'',amount:'',acc:S.accounts[0]?S.accounts[0].id:'',to:'',method:'Tunai',note:''});const [er,se]=useState('');const u=(k,v)=>sf(x=>({...x,[k]:v}));
+const ty=f.type,cats=ty==='income'?IN:EX,acs=S.accounts.map(a=>({v:a.id,l:a.name}));
+if(!acs.length)return html`<${Modal} t="Transaksi" close=${close}><p class="text-sm">Buat rekening dulu di menu Accounts.</p><//>`;
+const save=()=>{const amt=Number(f.amount);if(!(amt>0))return se('Nominal harus lebih dari 0.');if(ty!=='transfer'&&!String(f.name).trim())return se(ty==='income'?'Sumber pemasukan wajib diisi.':'Nama transaksi wajib diisi.');if(!f.date)return se('Tanggal wajib diisi.');if(ty==='transfer'&&(!f.to||f.to===f.acc))return se('Pilih rekening tujuan yang berbeda dari rekening asal.');
+const r={...f,amount:amt,name:ty==='transfer'?(String(f.name).trim()||'Transfer'):String(f.name).trim(),cat:ty==='transfer'?'Transfer':(f.cat||cats[0]),id:f.id||uid()};set(s=>({...s,tx:f.id?s.tx.map(x=>x.id===f.id?r:x):[...s.tx,r]}));close()};
+return html`<${Modal} t=${(f.id?'Edit ':'Tambah ')+{income:'pemasukan',expense:'pengeluaran',transfer:'transfer'}[ty]} close=${close}><div class="grid grid-cols-2 gap-3">
+${!f.id&&!type?html`<${F} l="Jenis" c="col-span-2"><${Sel} v=${ty} set=${v=>sf(x=>({...x,type:v,cat:''}))} o=${[{v:'expense',l:'Pengeluaran'},{v:'income',l:'Pemasukan'},{v:'transfer',l:'Transfer antar rekening'}]}/><//>`:null}
+<${F} l="Tanggal"><input type="date" class=${inp} value=${f.date} onChange=${e=>u('date',e.target.value)}/><//>
+<${F} l="Nominal (Rp)"><input type="number" min="0" step="any" inputMode="decimal" class=${inp} value=${f.amount} onInput=${e=>u('amount',e.target.value)} placeholder="0"/><//>
+<${F} l=${ty==='income'?'Sumber pemasukan':ty==='expense'?'Nama transaksi':'Keterangan (opsional)'} c="col-span-2"><input class=${inp} value=${f.name} onInput=${e=>u('name',e.target.value)}/><//>
+${ty!=='transfer'?html`<${F} l="Kategori"><${Sel} v=${f.cat||cats[0]} set=${v=>u('cat',v)} o=${cats}/><//>`:null}
+<${F} l=${ty==='income'?'Rekening tujuan':ty==='expense'?'Rekening':'Dari rekening'}><${Sel} v=${f.acc} set=${v=>u('acc',v)} o=${acs}/><//>
+${ty==='transfer'?html`<${F} l="Ke rekening"><${Sel} v=${f.to} set=${v=>u('to',v)} o=${acs} all="Pilih..."/><//>`:null}
+${ty==='expense'?html`<${F} l="Metode pembayaran"><${Sel} v=${f.method} set=${v=>u('method',v)} o=${METHODS}/><//>`:null}
+<${F} l="Catatan" c="col-span-2"><input class=${inp} value=${f.note} onInput=${e=>u('note',e.target.value)}/><//></div>
+${er?html`<p class="text-sm text-[#B5606E] mt-3">${er}</p>`:null}<div class="flex justify-end gap-2 mt-5"><${Btn} k="ghost" onClick=${close}>Batal<//><${Btn} onClick=${save}>Simpan<//></div><//>`};
+/* ===== Budget ===== */
+const BudPage=()=>{const {S,set,D}=useC();const [tt,st]=useState(S.budget.total||''),[cs,sc]=useState({...S.budget.cats});
+const save=()=>set(s=>({...s,budget:{total:Math.max(0,Number(tt)||0),cats:Object.fromEntries(Object.entries(cs).filter(e=>Number(e[1])>0).map(e=>[e[0],Number(e[1])]))}}));
+const used=k=>(D.cat.find(c=>c.label===k)||{value:0}).value;const bt=S.budget.total;
+const al=[...(bt>0&&D.exp/bt>=.8?[['Total budget',D.exp/bt*100]]:[]),...Object.entries(S.budget.cats).map(([k,v])=>[k,used(k)/v*100]).filter(x=>x[1]>=80)];
+const stat=p=>p>=100?'Terlampaui':p>=90?'Hampir habis (90%+)':'Waspada (80%+)';
+return html`<div><${Head} t="Budget" s="Atur anggaran bulanan dan pantau realisasinya"><${Btn} onClick=${save}>Simpan budget<//><//>
+${al.map(a=>html`<div key=${a[0]} class=${cx('rounded-2xl px-4 py-3 mb-2 text-sm font-semibold text-[#393544]',lvl(a[1]))}>${a[0]}: ${a[1].toFixed(0)}% terpakai. ${stat(a[1])}</div>`)}
+<${Card} c="my-4"><div class="grid sm:grid-cols-3 gap-4 items-end"><${F} l="Budget total bulanan (Rp)"><input type="number" min="0" class=${inp} value=${tt} onInput=${e=>st(e.target.value)} placeholder="0"/><//>
+<div><p class="text-xs text-[#888391]">Terpakai bulan ini</p><p class="font-bold">${idr(D.exp)}</p></div><div><p class="text-xs text-[#888391]">Sisa budget</p><p class=${cx('font-bold',bt-D.exp<0&&bt>0?'text-[#B5606E]':'')}>${bt>0?idr(bt-D.exp):'-'}</p></div></div>${bt>0?html`<div class="mt-3"><${Prog} p=${D.exp/bt*100}/></div>`:null}
+${bt>0&&sum(Object.values(cs).map(Number))>bt?html`<p class="text-xs text-[#8a6a2c] mt-3">Jumlah budget kategori melebihi budget total.</p>`:null}<//>
+<${Card}><${Title}>Budget per kategori<//><div class="space-y-4">${EX.map(k=>{const b=Number(S.budget.cats[k])||0,u=used(k),p=b>0?u/b*100:0;return html`<div key=${k} class="grid grid-cols-12 gap-2 sm:gap-4 items-center"><p class="col-span-12 sm:col-span-3 text-sm font-medium">${k}</p><div class="col-span-5 sm:col-span-3"><input type="number" min="0" class=${inp} placeholder="Budget" value=${cs[k]||''} onInput=${e=>sc(x=>({...x,[k]:e.target.value}))}/></div><div class="col-span-7 sm:col-span-6"><div class="flex justify-between text-xs text-[#888391] mb-1"><span>Terpakai ${idr(u)}</span><span>${b>0?'Sisa '+idr(b-u):'Belum diatur'}</span></div><${Prog} p=${p}/></div></div>`})}</div><p class="text-xs text-[#888391] mt-4">Klik “Simpan budget” setelah mengubah angka.</p><//></div>`};
+/* ===== Goals ===== */
+const GoalForm=({g,close})=>{const {set}=useC();const [f,sf]=useState(g||{name:'',target:'',saved:0,date:''});const [er,se]=useState('');const u=(k,v)=>sf(x=>({...x,[k]:v}));
+const save=()=>{if(!f.name.trim())return se('Nama target wajib diisi.');if(!(Number(f.target)>0))return se('Target nominal harus lebih dari 0.');if(Number(f.saved)<0||f.saved==='')return se('Nominal terkumpul tidak boleh kosong atau negatif.');if(!f.date)return se('Target tanggal wajib diisi.');
+const r={...f,name:f.name.trim(),target:Number(f.target),saved:Number(f.saved),id:f.id||uid()};set(s=>({...s,goals:f.id?s.goals.map(x=>x.id===f.id?r:x):[...s.goals,r]}));close()};
+return html`<${Modal} t=${g?'Edit target':'Target baru'} close=${close}><div class="grid grid-cols-2 gap-3"><${F} l="Nama target" c="col-span-2"><input class=${inp} value=${f.name} onInput=${e=>u('name',e.target.value)} placeholder="Contoh: Dana Liburan"/><//><${F} l="Target nominal"><input type="number" min="0" class=${inp} value=${f.target} onInput=${e=>u('target',e.target.value)}/><//><${F} l="Sudah terkumpul"><input type="number" min="0" class=${inp} value=${f.saved} onInput=${e=>u('saved',e.target.value)}/><//><${F} l="Target tanggal" c="col-span-2"><input type="date" class=${inp} value=${f.date} onChange=${e=>u('date',e.target.value)}/><//></div>${er?html`<p class="text-sm text-[#B5606E] mt-3">${er}</p>`:null}<div class="flex justify-end gap-2 mt-5"><${Btn} k="ghost" onClick=${close}>Batal<//><${Btn} onClick=${save}>Simpan<//></div><//>`};
+const DepForm=({g,close})=>{const {set}=useC();const [v,sv]=useState('');const [er,se]=useState('');
+return html`<${Modal} t=${'Tambah dana: '+g.name} close=${close}><${F} l="Nominal setoran (Rp)"><input type="number" min="0" class=${inp} value=${v} onInput=${e=>sv(e.target.value)}/><//>${er?html`<p class="text-sm text-[#B5606E] mt-3">${er}</p>`:null}<div class="flex justify-end gap-2 mt-5"><${Btn} k="ghost" onClick=${close}>Batal<//><${Btn} onClick=${()=>{if(!(Number(v)>0))return se('Nominal harus lebih dari 0.');set(s=>({...s,goals:s.goals.map(x=>x.id===g.id?{...x,saved:x.saved+Number(v)}:x)}));close()}}>Tambah<//></div><//>`};
+const GoalPage=()=>{const {S,set,ask,setModal}=useC();
+return html`<div><${Head} t="Savings Goals" s="Kumpulkan dana untuk target keuangan"><${Btn} onClick=${()=>setModal({k:'goal'})}>+ Target baru<//><//>
+${S.goals.length?html`<div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">${S.goals.map(g=>{const p=g.saved/g.target*100,left=Math.max(0,g.target-g.saved),days=Math.ceil((new Date(g.date+'T00:00:00')-new Date(today()+'T00:00:00'))/864e5);
+return html`<${Card} key=${g.id}><div class="flex justify-between items-start"><div><h3 class="font-semibold">${g.name}</h3><p class="text-xs text-[#888391]">Target ${fd(g.date)} · ${p>=100?'Tercapai':days>=0?days+' hari lagi':'Lewat '+(-days)+' hari'}</p></div><div class="flex"><button title="Edit" onClick=${()=>setModal({k:'goal',g})} class="p-1.5 text-[#888391] hover:text-[#8063A8]">✎</button><button title="Hapus" onClick=${()=>ask('Hapus target “'+g.name+'”?',()=>set(s=>({...s,goals:s.goals.filter(x=>x.id!==g.id)})))} class="p-1.5 text-[#888391] hover:text-[#C0707E]">✕</button></div></div>
+<p class="text-2xl font-bold mt-3">${Math.min(p,999).toFixed(0)}%</p><div class="my-2"><${Prog} p=${p} c=${p>=100?'bg-[#657F65]':'bg-[#91A88F]'}/></div><div class="flex justify-between text-xs text-[#888391]"><span>Terkumpul ${idr(g.saved)}</span><span>Target ${idr(g.target)}</span></div><p class="text-sm mt-2">Sisa: <b>${idr(left)}</b></p><${Btn} k="ghost" c="w-full mt-3" onClick=${()=>setModal({k:'dep',g})}>+ Tambah dana<//><//>`})}</div>`:html`<${Card}><${Empty} t="Belum ada target. Buat target pertamamu, misalnya Dana Darurat."/><//>`}</div>`};
+/* ===== Accounts ===== */
+const AccForm=({a,close})=>{const {set}=useC();const [f,sf]=useState(a||{name:'',type:'Bank Account',opening:''});const [er,se]=useState('');const u=(k,v)=>sf(x=>({...x,[k]:v}));
+const save=()=>{if(!f.name.trim())return se('Nama rekening wajib diisi.');if(f.opening===''||Number(f.opening)<0)return se('Saldo awal tidak boleh kosong atau negatif (isi 0 bila belum ada).');const r={...f,name:f.name.trim(),opening:Number(f.opening),id:f.id||uid()};set(s=>({...s,accounts:f.id?s.accounts.map(x=>x.id===f.id?r:x):[...s.accounts,r]}));close()};
+return html`<${Modal} t=${a?'Edit rekening':'Rekening baru'} close=${close}><div class="grid gap-3"><${F} l="Nama rekening"><input class=${inp} value=${f.name} onInput=${e=>u('name',e.target.value)} placeholder="Contoh: BCA, GoPay"/><//><${F} l="Jenis"><${Sel} v=${f.type} set=${v=>u('type',v)} o=${TYPES}/><//><${F} l="Saldo awal (Rp)"><input type="number" min="0" class=${inp} value=${f.opening} onInput=${e=>u('opening',e.target.value)}/><//></div>${er?html`<p class="text-sm text-[#B5606E] mt-3">${er}</p>`:null}<div class="flex justify-end gap-2 mt-5"><${Btn} k="ghost" onClick=${close}>Batal<//><${Btn} onClick=${save}>Simpan<//></div><//>`};
+const AccPage=()=>{const {S,D,set,ask,setModal}=useC();
+const rm=a=>S.tx.some(t=>t.acc===a.id||t.to===a.id)?ask('Rekening “'+a.name+'” masih punya transaksi, jadi tidak bisa dihapus. Hapus atau pindahkan transaksinya dulu.',null):ask('Hapus rekening “'+a.name+'”?',()=>set(s=>({...s,accounts:s.accounts.filter(x=>x.id!==a.id)})));
+return html`<div><${Head} t="Accounts" s="Kelola rekening. Transfer tidak dihitung sebagai income atau expense."><${Btn} k="ghost" onClick=${()=>setModal({k:'tx',type:'transfer'})}>Transfer<//><${Btn} onClick=${()=>setModal({k:'acc'})}>+ Rekening<//><//>
+<${Card} c="mb-4"><p class="text-xs text-[#888391]">Total saldo</p><p class="text-2xl font-bold">${idr(D.total)}</p><//>
+<div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">${S.accounts.map(a=>html`<${Card} key=${a.id}><div class="flex justify-between"><div><h3 class="font-semibold">${a.name}</h3><p class="text-xs text-[#888391]">${a.type}</p></div><div class="flex"><button title="Edit" onClick=${()=>setModal({k:'acc',a})} class="p-1.5 text-[#888391] hover:text-[#8063A8]">✎</button><button title="Hapus" onClick=${()=>rm(a)} class="p-1.5 text-[#888391] hover:text-[#C0707E]">✕</button></div></div><p class="text-xl font-bold mt-3">${idr(D.bal[a.id])}</p><p class="text-xs text-[#888391]">Saldo awal ${idr(a.opening)}</p><//>`)}</div></div>`};
+/* ===== Reports ===== */
+const rng=p=>{const t=today();if(p==='day')return[t,t];if(p==='week'){const a=new Date(t+'T00:00:00');a.setDate(a.getDate()-6);return[iso(a),t]}if(p==='month')return[t.slice(0,8)+'01',t.slice(0,7)+'-31'];return[t.slice(0,4)+'-01-01',t.slice(0,4)+'-12-31']};
+const RepPage=()=>{const {S,setModal}=useC();const [p,sp]=useState('month');const [cf,scf]=useState(''),[ct,sct]=useState('');
+const [a,b]=p==='custom'?[cf||'0000-01-01',ct||'9999-12-31']:rng(p);const L=S.tx.filter(t=>t.date>=a&&t.date<=b);const inR=d=>d>=a&&d<=b;
+const inc=tot(L,'income',()=>true),exp=tot(L,'expense',()=>true),cat=byCat(L.filter(t=>t.type==='expense'));const ms=lastM(6);
+const mb=ms.map(m=>({label:mlabel(m),a:0,b:tot(S.tx,'expense',d=>mk(d)===m)}));let c=0;const tr=ms.map(m=>{c+=tot(S.tx,'income',d=>mk(d)===m)-tot(S.tx,'expense',d=>mk(d)===m);return{label:mlabel(m),v:c}});
+const q=s=>'"'+String(s==null?'':s).replace(/"/g,'""')+'"';const an=id=>(S.accounts.find(x=>x.id===id)||{name:''}).name;
+const csv=()=>['Tanggal,Jenis,Nama,Kategori,Nominal,Rekening,Rekening Tujuan,Metode,Catatan',...[...L].sort((x,y)=>x.date.localeCompare(y.date)).map(t=>[t.date,t.type,t.name,t.cat,t.amount,an(t.acc),an(t.to),t.method||'',t.note||''].map(q).join(','))].join('\n');
+const sub=p==='custom'?(cf||ct?(cf?fd(cf):'awal')+' - '+(ct?fd(ct):'sekarang'):'Semua tanggal'):fd(a)+(a===b?'':' - '+fd(p==='month'||p==='year'?today():b));
+return html`<div><${Head} t="Reports" s=${sub}><${Btn} k="ghost" onClick=${()=>setModal({k:'csv',text:csv()})}>Export CSV<//><//>
+<div class="flex flex-wrap gap-2 mb-4">${[['day','Harian'],['week','7 hari'],['month','Bulanan'],['year','Tahunan'],['custom','Custom']].map(x=>html`<button key=${x[0]} onClick=${()=>sp(x[0])} class=${cx('px-3.5 py-1.5 rounded-full text-sm font-medium border',p===x[0]?'bg-[#8063A8] text-white border-[#8063A8]':'border-[#E3D8F0] dark:border-[#3d3650] focus:border-[#91A88F]')}>${x[1]}</button>`)}
+${p==='custom'?html`<input type="date" class=${inp+' !w-auto'} value=${cf} onChange=${e=>scf(e.target.value)}/><input type="date" class=${inp+' !w-auto'} value=${ct} onChange=${e=>sct(e.target.value)}/>`:null}</div>
+<div class="grid grid-cols-3 gap-3 mb-4"><${Stat} l="Income" v=${idr(inc)} tone="text-[#657F65] dark:text-[#a9c0a7]"/><${Stat} l="Expense" v=${idr(exp)} tone="text-[#C0707E] dark:text-[#e3a3ad]"/><${Stat} l="Net Cash Flow" v=${idr(inc-exp)} tone=${inc-exp<0?'text-[#B5606E]':''}/></div>
+<div class="grid lg:grid-cols-2 gap-4"><${Card}><${Title}>Pengeluaran per kategori<//><${Donut} data=${cat}/><//>
+<${Card}><${Title}>Top 5 kategori pengeluaran<//>${cat.length?html`<div class="space-y-3">${cat.slice(0,5).map((x,i)=>html`<div key=${x.label}><div class="flex justify-between text-sm mb-1"><span>${i+1}. ${x.label}</span><b>${idr(x.value)}</b></div><${Prog} p=${x.value/cat[0].value*100} c="bg-[#A78BCA]"/></div>`)}</div>`:html`<${Empty} t="Belum ada pengeluaran pada periode ini."/>`}<//>
+<${Card}><${Title}>Pengeluaran antarbulan<//><${Bars} data=${mb} one=${1}/><//><${Card}><${Title}>Tren tabungan (akumulasi income - expense)<//><${Line} data=${tr}/><//></div>
+<${Card} c="mt-4"><${Title}>Insight otomatis<//><${Insights}/><//></div>`};
+/* ===== Settings ===== */
+const SetPage=()=>{const {S,set,ask,dark,setDark}=useC();const has=S.tx.some(t=>t.sample)||S.accounts.some(a=>a.sample)||S.goals.some(g=>g.sample);
+const add=()=>{const m=sample();set(s=>({...s,accounts:[...s.accounts,...m.A],tx:[...s.tx,...m.tx],goals:[...s.goals,...m.goals],budget:s.budget.total||Object.keys(s.budget.cats).length?s.budget:{sample:true,total:7500000,cats:{'Food & Beverage':1800000,Housing:2000000,'Bills & Utilities':700000,Shopping:500000,Transportation:400000,Entertainment:300000}}}))};
+const rmS=()=>set(s=>{const tx=s.tx.filter(t=>!t.sample);const used=new Set(tx.flatMap(t=>[t.acc,t.to]));return{...s,tx,accounts:s.accounts.filter(a=>!a.sample||used.has(a.id)),goals:s.goals.filter(g=>!g.sample),budget:s.budget.sample?{total:0,cats:{}}:s.budget}});
+const Row2=({t,d,children})=>html`<div class="flex flex-wrap items-center justify-between gap-3 py-4 border-b last:border-0 border-[#F1EDF6] dark:border-[#2e283b]"><div class="min-w-0"><p class="text-sm font-semibold">${t}</p><p class="text-xs text-[#888391]">${d}</p></div>${children}</div>`;
+return html`<div><${Head} t="Settings" s="Tampilan dan pengelolaan data"/><${Card}>
+<${Row2} t="Tema" d="Pilih mode terang atau gelap"><${Btn} k="ghost" onClick=${()=>setDark(!dark)}>${dark?'Mode terang':'Mode gelap'}<//><//>
+<${Row2} t="Data contoh" d="Isi aplikasi dengan transaksi, rekening, dan target contoh untuk mencoba fitur. Data contoh bisa dihapus tanpa menyentuh data aslimu."><div class="flex gap-2"><${Btn} k="ghost" disabled=${has} onClick=${add}>Muat contoh<//><${Btn} k="ghost" disabled=${!has} onClick=${()=>ask('Hapus semua data contoh? Data yang kamu input sendiri tetap aman.',rmS)}>Hapus contoh<//></div><//>
+<${Row2} t="Reset semua data" d="Menghapus semua rekening, transaksi, budget, dan target dari browser ini."><${Btn} k="danger" onClick=${()=>ask('Hapus SEMUA data? Tindakan ini tidak bisa dibatalkan.',()=>set(blank()))}>Reset data<//><//></${Card}>
+<p class="text-xs text-[#888391] mt-4">Data tersimpan di browser ini (localStorage) dan tidak dikirim ke server.</p></div>`};
+/* ===== App ===== */
+const NAV=[['dash','Dashboard','▦'],['tx','Transactions','⇄'],['inc','Income','↓'],['exp','Expenses','↑'],['bud','Budget','◔'],['goal','Savings Goals','★'],['acc','Accounts','▣'],['rep','Reports','▤'],['set','Settings','⚙']];
+const App=()=>{const [S,set]=useState(load);const [pg,setPg]=useState('dash');const [open,setOpen]=useState(false);const [modal,setModal]=useState(null);
+const [dark,setDark]=useState(()=>{try{const v=localStorage.getItem('mf_theme');if(v)return v==='d'}catch(e){}return matchMedia('(prefers-color-scheme: dark)').matches});
+useEffect(()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}},[S]);
+useEffect(()=>{document.documentElement.classList.toggle('dark',dark);try{localStorage.setItem('mf_theme',dark?'d':'l')}catch(e){}},[dark]);
+const D=useMemo(()=>derive(S),[S]);const close=()=>setModal(null);
+const ask=(msg,ok)=>setModal({k:'ask',msg,ok});const edit=t=>setModal({k:'tx',t});
+const del=t=>ask('Hapus transaksi “'+t.name+'”?',()=>set(s=>({...s,tx:s.tx.filter(x=>x.id!==t.id)})));
+const v={S,set,D,ask,edit,del,setModal,dark,setDark,nav:p=>{setPg(p);setOpen(false);scrollTo(0,0)}};
+const page={dash:html`<${Dash}/>`,tx:html`<${TxPage} key="a" kind="all"/>`,inc:html`<${TxPage} key="i" kind="income"/>`,exp:html`<${TxPage} key="e" kind="expense"/>`,bud:html`<${BudPage} key=${JSON.stringify(S.budget)}/>`,goal:html`<${GoalPage}/>`,acc:html`<${AccPage}/>`,rep:html`<${RepPage}/>`,set:html`<${SetPage}/>`}[pg];
+const m=modal;const nb=(S.budget.total>0&&D.exp/S.budget.total>=.8?1:0)+Object.entries(S.budget.cats).filter(x=>((D.cat.find(c=>c.label===x[0])||{value:0}).value/x[1])>=.8).length;
+return html`<${Ctx.Provider} value=${v}><div class="min-h-screen">
+<aside class=${cx('fixed inset-y-0 left-0 z-30 w-64 bg-[#F7F3FB] dark:bg-[#1e1a28] border-r border-[#EAE6EF] dark:border-[#352f42] p-4 flex flex-col transition-transform md:translate-x-0',open?'':'-translate-x-full')} style=${{paddingTop:'calc(1rem + env(safe-area-inset-top,0px))'}}>
+<div class="flex items-center gap-2.5 px-2 mb-6"><div class="w-9 h-9 rounded-2xl bg-[#8063A8] text-white grid place-items-center font-bold">H</div><div><p class="font-bold leading-tight">Heavenly Finance</p><p class="text-[11px] text-[#888391] leading-tight">Personal Finance Tracker</p></div></div>
+<nav class="space-y-1 flex-1 overflow-y-auto">${NAV.map(n=>html`<button key=${n[0]} onClick=${()=>v.nav(n[0])} class=${cx('w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-medium text-left transition',pg===n[0]?'bg-[#E9DFF5] text-[#6b4f93] dark:bg-[#3a3150] dark:text-[#e0d0f2]':'text-[#6b6575] dark:text-[#cfc9da] hover:bg-[#EFE8F7] dark:hover:bg-[#2e283b]')}><span class="w-5 text-center text-[#657F65] dark:text-[#a9c0a7]">${n[2]}</span>${n[1]}${n[0]==='bud'&&nb?html`<span class="ml-auto text-[11px] px-1.5 rounded-full bg-[#F6E1E4] text-[#B5606E]">${nb}</span>`:null}</button>`)}</nav>
+<button onClick=${()=>setDark(!dark)} class="mt-3 px-3 py-2 rounded-2xl text-sm border border-[#EAE6EF] dark:border-[#352f42] text-left">${dark?'☀ Mode terang':'☾ Mode gelap'}</button></aside>
+${open?html`<div class="fixed inset-0 z-20 bg-black/40 md:hidden" onClick=${()=>setOpen(false)}></div>`:null}
+<header class="md:hidden sticky z-10 flex items-center gap-3 px-4 py-3 bg-[#FAF9FC]/90 dark:bg-[#18151f]/90 backdrop-blur border-b border-[#EAE6EF] dark:border-[#352f42]" style=${{top:'env(safe-area-inset-top,0px)'}}><button aria-label="Menu" onClick=${()=>setOpen(true)} class="text-xl">☰</button><b>Heavenly Finance</b></header>
+<main key=${pg} class="pg md:ml-64 p-4 sm:p-6 lg:p-8 max-w-6xl">${page}</main></div>
+${m&&m.k==='tx'?html`<${TxForm} t=${m.t} type=${m.type} close=${close}/>`:null}${m&&m.k==='acc'?html`<${AccForm} a=${m.a} close=${close}/>`:null}${m&&m.k==='goal'?html`<${GoalForm} g=${m.g} close=${close}/>`:null}${m&&m.k==='dep'?html`<${DepForm} g=${m.g} close=${close}/>`:null}
+${m&&m.k==='csv'?html`<${Modal} t="Export CSV" close=${close}><p class="text-xs text-[#888391] mb-2">Salin teks di bawah, lalu tempel ke Excel, Google Sheets, atau file .csv.</p><textarea readonly class=${inp+' h-48 font-mono text-xs'} onFocus=${e=>e.target.select()} value=${m.text}></textarea><div class="flex justify-end mt-4"><${Btn} onClick=${e=>{const ta=e.target.closest('div').parentNode.querySelector('textarea');ta.select();try{navigator.clipboard.writeText(m.text)}catch(x){try{document.execCommand('copy')}catch(y){}}e.target.textContent='Tersalin (atau sudah terpilih)'}}>Salin CSV<//></div><//>`:null}
+${m&&m.k==='ask'?html`<${Modal} t="Konfirmasi" close=${close}><p class="text-sm">${m.msg}</p><div class="flex justify-end gap-2 mt-5"><${Btn} k="ghost" onClick=${close}>${m.ok?'Batal':'Mengerti'}<//>${m.ok?html`<${Btn} k="danger" onClick=${()=>{m.ok();close()}}>Hapus<//>`:null}</div><//>`:null}
+<//>`};
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+</script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(err=>console.warn('Service worker gagal didaftarkan:',err)));}</script>
+</body></html>
